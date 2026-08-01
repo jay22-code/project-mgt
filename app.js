@@ -1,6 +1,5 @@
 // Project Pulse - Task Management & Progress Tracker Engine
 
-// Default Initial Task List (Pre-loaded implementation tasks)
 const DEFAULT_TASKS = [
   {
     id: "TASK-01",
@@ -135,7 +134,6 @@ class ProjectBoardApp {
   }
 
   async loadTasks() {
-    // Try loading from Supabase first if available
     if (window.supabaseService && window.supabaseService.isConfigured) {
       const remoteTasks = await window.supabaseService.fetchTasks();
       if (remoteTasks && remoteTasks.length > 0) {
@@ -146,7 +144,6 @@ class ProjectBoardApp {
       }
     }
 
-    // Fallback to local storage
     const saved = localStorage.getItem('project_pulse_tasks');
     if (saved) {
       try {
@@ -181,32 +178,26 @@ class ProjectBoardApp {
   }
 
   bindEvents() {
-    // View switching
     if (this.btnViewKanban) this.btnViewKanban.addEventListener('click', () => this.switchView('kanban'));
     if (this.btnViewList) this.btnViewList.addEventListener('click', () => this.switchView('list'));
 
-    // Search and filter
     if (this.searchInput) this.searchInput.addEventListener('input', () => this.render());
     if (this.priorityFilter) this.priorityFilter.addEventListener('change', () => this.render());
 
-    // Task Modal
     if (this.btnAddTask) this.btnAddTask.addEventListener('click', () => this.openTaskModal());
     if (this.btnCloseModal) this.btnCloseModal.addEventListener('click', () => this.closeTaskModal());
     if (this.btnCancelModal) this.btnCancelModal.addEventListener('click', () => this.closeTaskModal());
     if (this.taskForm) this.taskForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
 
-    // Supabase Modal
     if (this.btnSupabaseConfig) this.btnSupabaseConfig.addEventListener('click', () => this.openSupabaseModal());
     if (this.btnCloseSpModal) this.btnCloseSpModal.addEventListener('click', () => this.closeSupabaseModal());
     if (this.btnCancelSpModal) this.btnCancelSpModal.addEventListener('click', () => this.closeSupabaseModal());
     if (this.supabaseForm) this.supabaseForm.addEventListener('submit', (e) => this.handleSupabaseFormSubmit(e));
 
-    // Export & Import
     if (this.btnExportJson) this.btnExportJson.addEventListener('click', () => this.exportJson());
     if (this.btnImportJson) this.btnImportJson.addEventListener('click', () => this.fileImportInput.click());
     if (this.fileImportInput) this.fileImportInput.addEventListener('change', (e) => this.importJson(e));
 
-    // Drag and Drop for Kanban Columns
     Object.keys(this.containers).forEach(status => {
       const container = this.containers[status];
       if (!container) return;
@@ -321,7 +312,7 @@ class ProjectBoardApp {
     card.dataset.id = task.id;
 
     const tagsHtml = (task.tags || []).map(t => `<span class="tag-badge">#${t}</span>`).join('');
-    const priorityLabels = { 'high': '🔥 High', 'medium': '⚡ Med', 'low': '🌱 Low' };
+    const priorityLabels = { 'high': 'High', 'medium': 'Med', 'low': 'Low' };
 
     card.innerHTML = `
       <div class="task-card-header">
@@ -449,10 +440,10 @@ class ProjectBoardApp {
     if (window.supabaseService) {
       const ok = window.supabaseService.saveCredentials(url, key);
       if (ok) {
-        alert("⚡ Supabase 데이터베이스와 성공적으로 연결되었습니다.");
+        alert("Supabase 데이터베이스와 연결되었습니다.");
         await this.loadTasks();
       } else {
-        alert("⚠️ Supabase 연결에 실패하였습니다. Key와 URL을 다시 확인해주세요.");
+        alert("Supabase 연결 실패: URL과 Key를 확인하세요.");
       }
     }
     this.closeSupabaseModal();
@@ -503,7 +494,7 @@ class ProjectBoardApp {
   }
 
   async deleteTask(taskId) {
-    if (confirm(`Task (${taskId})를 정말 삭제하시겠습니까?`)) {
+    if (confirm(`Task (${taskId})를 삭제하시겠습니까?`)) {
       this.tasks = this.tasks.filter(t => t.id !== taskId);
       await this.deleteTaskFromCloud(taskId);
       this.render();
@@ -532,7 +523,7 @@ class ProjectBoardApp {
           this.tasks = importedTasks;
           this.saveLocalStorage();
           this.render();
-          alert('성공적으로 Task 목록을 불러왔습니다.');
+          alert('Task 목록을 불러왔습니다.');
         } else {
           alert('올바른 JSON 포맷이 아닙니다.');
         }
@@ -544,7 +535,6 @@ class ProjectBoardApp {
   }
 }
 
-// Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
   window.app = new ProjectBoardApp();
 });
