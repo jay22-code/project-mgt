@@ -61,7 +61,7 @@ const DEFAULT_TASKS = [
 class ProjectBoardApp {
   constructor() {
     this.tasks = [];
-    this.currentView = 'kanban'; // 'kanban' or 'list'
+    this.currentView = 'kanban';
     this.draggedTaskId = null;
 
     this.initElements();
@@ -71,7 +71,7 @@ class ProjectBoardApp {
   }
 
   initElements() {
-    // Metric elements
+    // Metrics
     this.metricTotal = document.getElementById('metric-total');
     this.metricInProgress = document.getElementById('metric-in-progress');
     this.metricDone = document.getElementById('metric-done');
@@ -92,6 +92,7 @@ class ProjectBoardApp {
     this.btnExportJson = document.getElementById('btn-export-json');
     this.btnImportJson = document.getElementById('btn-import-json');
     this.fileImportInput = document.getElementById('file-import-input');
+    this.btnSupabaseConfig = document.getElementById('btn-supabase-config');
 
     // Containers
     this.containers = {
@@ -102,7 +103,7 @@ class ProjectBoardApp {
       'done': document.getElementById('container-done')
     };
 
-    // Counts
+    // Column counters
     this.counts = {
       'backlog': document.getElementById('count-backlog'),
       'todo': document.getElementById('count-todo'),
@@ -111,7 +112,7 @@ class ProjectBoardApp {
       'done': document.getElementById('count-done')
     };
 
-    // Modal
+    // Task Modal
     this.taskModal = document.getElementById('task-modal');
     this.taskForm = document.getElementById('task-form');
     this.modalTitle = document.getElementById('modal-title');
@@ -123,9 +124,29 @@ class ProjectBoardApp {
     this.taskDescInput = document.getElementById('task-desc-input');
     this.btnCloseModal = document.getElementById('btn-close-modal');
     this.btnCancelModal = document.getElementById('btn-cancel-modal');
+
+    // Supabase Modal
+    this.supabaseModal = document.getElementById('supabase-modal');
+    this.supabaseForm = document.getElementById('supabase-form');
+    this.spUrlInput = document.getElementById('sp-url-input');
+    this.spKeyInput = document.getElementById('sp-key-input');
+    this.btnCloseSpModal = document.getElementById('btn-close-sp-modal');
+    this.btnCancelSpModal = document.getElementById('btn-cancel-sp-modal');
   }
 
-  loadTasks() {
+  async loadTasks() {
+    // Try loading from Supabase first if available
+    if (window.supabaseService && window.supabaseService.isConfigured) {
+      const remoteTasks = await window.supabaseService.fetchTasks();
+      if (remoteTasks && remoteTasks.length > 0) {
+        this.tasks = remoteTasks;
+        this.saveLocalStorage();
+        this.render();
+        return;
+      }
+    }
+
+    // Fallback to local storage
     const saved = localStorage.getItem('project_pulse_tasks');
     if (saved) {
       try {
@@ -136,37 +157,59 @@ class ProjectBoardApp {
       }
     } else {
       this.tasks = DEFAULT_TASKS;
-      this.saveTasks();
+      this.saveLocalStorage();
+    }
+    this.render();
+  }
+
+  saveLocalStorage() {
+    localStorage.setItem('project_pulse_tasks', JSON.stringify(this.tasks));
+  }
+
+  async syncTaskToCloud(task) {
+    this.saveLocalStorage();
+    if (window.supabaseService && window.supabaseService.isConfigured) {
+      await window.supabaseService.upsertTask(task);
     }
   }
 
-  saveTasks() {
-    localStorage.setItem('project_pulse_tasks', JSON.stringify(this.tasks));
+  async deleteTaskFromCloud(taskId) {
+    this.saveLocalStorage();
+    if (window.supabaseService && window.supabaseService.isConfigured) {
+      await window.supabaseService.deleteTask(taskId);
+    }
   }
 
   bindEvents() {
     // View switching
-    this.btnViewKanban.addEventListener('click', () => this.switchView('kanban'));
-    this.btnViewList.addEventListener('click', () => this.switchView('list'));
+    if (this.btnViewKanban) this.btnViewKanban.addEventListener('click', () => this.switchView('kanban'));
+    if (this.btnViewList) this.btnViewList.addEventListener('click', () => this.switchView('list'));
 
     // Search and filter
-    this.searchInput.addEventListener('input', () => this.render());
-    this.priorityFilter.addEventListener('change', () => this.render());
+    if (this.searchInput) this.searchInput.addEventListener('input', () => this.render());
+    if (this.priorityFilter) this.priorityFilter.addEventListener('change', () => this.render());
 
-    // Modal events
-    this.btnAddTask.addEventListener('click', () => this.openTaskModal());
-    this.btnCloseModal.addEventListener('click', () => this.closeTaskModal());
-    this.btnCancelModal.addEventListener('click', () => this.closeTaskModal());
-    this.taskForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
+    // Task Modal
+    if (this.btnAddTask) this.btnAddTask.addEventListener('click', () => this.openTaskModal());
+    if (this.btnCloseModal) this.btnCloseModal.addEventListener('click', () => this.closeTaskModal());
+    if (this.btnCancelModal) this.btnCancelModal.addEventListener('click', () => this.closeTaskModal());
+    if (this.taskForm) this.taskForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
+
+    // Supabase Modal
+    if (this.btnSupabaseConfig) this.btnSupabaseConfig.addEventListener('click', () => this.openSupabaseModal());
+    if (this.btnCloseSpModal) this.btnCloseSpModal.addEventListener('click', () => this.closeSupabaseModal());
+    if (this.btnCancelSpModal) this.btnCancelSpModal.addEventListener('click', () => this.closeSupabaseModal());
+    if (this.supabaseForm) this.supabaseForm.addEventListener('submit', (e) => this.handleSupabaseFormSubmit(e));
 
     // Export & Import
-    this.btnExportJson.addEventListener('click', () => this.exportJson());
-    this.btnImportJson.addEventListener('click', () => this.fileImportInput.click());
-    this.fileImportInput.addEventListener('change', (e) => this.importJson(e));
+    if (this.btnExportJson) this.btnExportJson.addEventListener('click', () => this.exportJson());
+    if (this.btnImportJson) this.btnImportJson.addEventListener('click', () => this.fileImportInput.click());
+    if (this.fileImportInput) this.fileImportInput.addEventListener('change', (e) => this.importJson(e));
 
     // Drag and Drop for Kanban Columns
     Object.keys(this.containers).forEach(status => {
       const container = this.containers[status];
+      if (!container) return;
 
       container.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -191,29 +234,29 @@ class ProjectBoardApp {
   switchView(viewMode) {
     this.currentView = viewMode;
     if (viewMode === 'kanban') {
-      this.kanbanView.classList.remove('hidden');
-      this.listView.classList.add('hidden');
-      this.btnViewKanban.classList.add('active');
-      this.btnViewList.classList.remove('active');
+      if (this.kanbanView) this.kanbanView.classList.remove('hidden');
+      if (this.listView) this.listView.classList.add('hidden');
+      if (this.btnViewKanban) this.btnViewKanban.classList.add('active');
+      if (this.btnViewList) this.btnViewList.classList.remove('active');
     } else {
-      this.kanbanView.classList.add('hidden');
-      this.listView.classList.remove('hidden');
-      this.btnViewKanban.classList.remove('active');
-      this.btnViewList.classList.add('active');
+      if (this.kanbanView) this.kanbanView.classList.add('hidden');
+      if (this.listView) this.listView.classList.remove('hidden');
+      if (this.btnViewKanban) this.btnViewKanban.classList.remove('active');
+      if (this.btnViewList) this.btnViewList.classList.add('active');
     }
     this.render();
   }
 
   getFilteredTasks() {
-    const query = this.searchInput.value.trim().toLowerCase();
-    const priority = this.priorityFilter.value;
+    const query = this.searchInput ? this.searchInput.value.trim().toLowerCase() : '';
+    const priority = this.priorityFilter ? this.priorityFilter.value : 'all';
 
     return this.tasks.filter(task => {
       const matchesSearch = query === '' ||
-        task.title.toLowerCase().includes(query) ||
-        task.desc.toLowerCase().includes(query) ||
-        task.tags.some(t => t.toLowerCase().includes(query)) ||
-        task.id.toLowerCase().includes(query);
+        (task.title && task.title.toLowerCase().includes(query)) ||
+        (task.desc && task.desc.toLowerCase().includes(query)) ||
+        (task.tags && task.tags.some(t => t.toLowerCase().includes(query))) ||
+        (task.id && task.id.toLowerCase().includes(query));
 
       const matchesPriority = priority === 'all' || task.priority === priority;
 
@@ -227,11 +270,11 @@ class ProjectBoardApp {
     const done = this.tasks.filter(t => t.status === 'done').length;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
-    this.metricTotal.textContent = total;
-    this.metricInProgress.textContent = inProgress;
-    this.metricDone.textContent = done;
-    this.metricPercent.textContent = `${percent}%`;
-    this.progressBarFill.style.width = `${percent}%`;
+    if (this.metricTotal) this.metricTotal.textContent = total;
+    if (this.metricInProgress) this.metricInProgress.textContent = inProgress;
+    if (this.metricDone) this.metricDone.textContent = done;
+    if (this.metricPercent) this.metricPercent.textContent = `${percent}%`;
+    if (this.progressBarFill) this.progressBarFill.style.width = `${percent}%`;
   }
 
   render() {
@@ -246,10 +289,9 @@ class ProjectBoardApp {
   }
 
   renderKanban(filteredTasks) {
-    // Clear all containers & counts
     Object.keys(this.containers).forEach(status => {
-      this.containers[status].innerHTML = '';
-      this.counts[status].textContent = '0';
+      if (this.containers[status]) this.containers[status].innerHTML = '';
+      if (this.counts[status]) this.counts[status].textContent = '0';
     });
 
     const statusCounts = { 'backlog': 0, 'todo': 0, 'in-progress': 0, 'in-review': 0, 'done': 0 };
@@ -265,7 +307,6 @@ class ProjectBoardApp {
       }
     });
 
-    // Update status counters
     Object.keys(statusCounts).forEach(status => {
       if (this.counts[status]) {
         this.counts[status].textContent = statusCounts[status];
@@ -279,7 +320,7 @@ class ProjectBoardApp {
     card.draggable = true;
     card.dataset.id = task.id;
 
-    const tagsHtml = task.tags.map(t => `<span class="tag-badge">#${t}</span>`).join('');
+    const tagsHtml = (task.tags || []).map(t => `<span class="tag-badge">#${t}</span>`).join('');
     const priorityLabels = { 'high': '🔥 High', 'medium': '⚡ Med', 'low': '🌱 Low' };
 
     card.innerHTML = `
@@ -290,14 +331,13 @@ class ProjectBoardApp {
           <button class="action-btn delete" title="삭제"><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>
-      <p class="task-card-desc">${task.desc}</p>
+      <p class="task-card-desc">${task.desc || ''}</p>
       <div class="task-card-footer">
         <div class="task-tags">${tagsHtml}</div>
         <span class="priority-badge ${task.priority}">${priorityLabels[task.priority] || task.priority}</span>
       </div>
     `;
 
-    // Drag Events
     card.addEventListener('dragstart', (e) => {
       this.draggedTaskId = task.id;
       card.classList.add('dragging');
@@ -309,7 +349,6 @@ class ProjectBoardApp {
       this.draggedTaskId = null;
     });
 
-    // Edit/Delete button handlers
     card.querySelector('.edit').addEventListener('click', (e) => {
       e.stopPropagation();
       this.openTaskModal(task);
@@ -324,7 +363,9 @@ class ProjectBoardApp {
   }
 
   renderList(filteredTasks) {
+    if (!this.taskListBody) return;
     this.taskListBody.innerHTML = '';
+
     const statusBadges = {
       'backlog': '<span class="priority-badge low">대기</span>',
       'todo': '<span class="priority-badge medium">진행 예정</span>',
@@ -335,13 +376,13 @@ class ProjectBoardApp {
 
     filteredTasks.forEach(task => {
       const tr = document.createElement('tr');
-      const tagsStr = task.tags.map(t => `#${t}`).join(' ');
+      const tagsStr = (task.tags || []).map(t => `#${t}`).join(' ');
 
       tr.innerHTML = `
         <td><strong style="color: var(--accent-primary);">${task.id}</strong></td>
-        <td><strong>${task.title}</strong><br><small style="color:var(--text-muted);">${task.desc}</small></td>
+        <td><strong>${task.title}</strong><br><small style="color:var(--text-muted);">${task.desc || ''}</small></td>
         <td>${statusBadges[task.status] || task.status}</td>
-        <td><span class="priority-badge ${task.priority}">${task.priority.toUpperCase()}</span></td>
+        <td><span class="priority-badge ${task.priority}">${task.priority ? task.priority.toUpperCase() : ''}</span></td>
         <td>${tagsStr}</td>
         <td>${task.createdAt || '-'}</td>
         <td>
@@ -357,11 +398,11 @@ class ProjectBoardApp {
     });
   }
 
-  updateTaskStatus(taskId, newStatus) {
+  async updateTaskStatus(taskId, newStatus) {
     const task = this.tasks.find(t => t.id === taskId);
     if (task && task.status !== newStatus) {
       task.status = newStatus;
-      this.saveTasks();
+      await this.syncTaskToCloud(task);
       this.render();
     }
   }
@@ -373,8 +414,8 @@ class ProjectBoardApp {
       this.taskTitleInput.value = task.title;
       this.taskStatusSelect.value = task.status;
       this.taskPrioritySelect.value = task.priority;
-      this.taskTagsInput.value = task.tags.join(', ');
-      this.taskDescInput.value = task.desc;
+      this.taskTagsInput.value = (task.tags || []).join(', ');
+      this.taskDescInput.value = task.desc || '';
     } else {
       this.modalTitle.innerHTML = '<i class="fa-solid fa-plus-circle"></i> 새 Task 추가';
       this.taskIdInput.value = '';
@@ -390,7 +431,34 @@ class ProjectBoardApp {
     this.taskModal.classList.add('hidden');
   }
 
-  handleFormSubmit(e) {
+  openSupabaseModal() {
+    if (this.spUrlInput) this.spUrlInput.value = localStorage.getItem('supabase_url') || '';
+    if (this.spKeyInput) this.spKeyInput.value = localStorage.getItem('supabase_anon_key') || '';
+    if (this.supabaseModal) this.supabaseModal.classList.remove('hidden');
+  }
+
+  closeSupabaseModal() {
+    if (this.supabaseModal) this.supabaseModal.classList.add('hidden');
+  }
+
+  async handleSupabaseFormSubmit(e) {
+    e.preventDefault();
+    const url = this.spUrlInput.value.trim();
+    const key = this.spKeyInput.value.trim();
+
+    if (window.supabaseService) {
+      const ok = window.supabaseService.saveCredentials(url, key);
+      if (ok) {
+        alert("⚡ Supabase 데이터베이스와 성공적으로 연결되었습니다.");
+        await this.loadTasks();
+      } else {
+        alert("⚠️ Supabase 연결에 실패하였습니다. Key와 URL을 다시 확인해주세요.");
+      }
+    }
+    this.closeSupabaseModal();
+  }
+
+  async handleFormSubmit(e) {
     e.preventDefault();
     const id = this.taskIdInput.value;
     const title = this.taskTitleInput.value.trim();
@@ -401,20 +469,20 @@ class ProjectBoardApp {
 
     if (!title) return;
 
+    let targetTask = null;
+
     if (id) {
-      // Edit existing
-      const task = this.tasks.find(t => t.id === id);
-      if (task) {
-        task.title = title;
-        task.status = status;
-        task.priority = priority;
-        task.tags = tags;
-        task.desc = desc;
+      targetTask = this.tasks.find(t => t.id === id);
+      if (targetTask) {
+        targetTask.title = title;
+        targetTask.status = status;
+        targetTask.priority = priority;
+        targetTask.tags = tags;
+        targetTask.desc = desc;
       }
     } else {
-      // Create new
       const newId = `TASK-${String(this.tasks.length + 1).padStart(2, '0')}`;
-      const newTask = {
+      targetTask = {
         id: newId,
         title,
         status,
@@ -423,18 +491,21 @@ class ProjectBoardApp {
         desc,
         createdAt: new Date().toISOString().split('T')[0]
       };
-      this.tasks.push(newTask);
+      this.tasks.push(targetTask);
     }
 
-    this.saveTasks();
+    if (targetTask) {
+      await this.syncTaskToCloud(targetTask);
+    }
+
     this.closeTaskModal();
     this.render();
   }
 
-  deleteTask(taskId) {
+  async deleteTask(taskId) {
     if (confirm(`Task (${taskId})를 정말 삭제하시겠습니까?`)) {
       this.tasks = this.tasks.filter(t => t.id !== taskId);
-      this.saveTasks();
+      await this.deleteTaskFromCloud(taskId);
       this.render();
     }
   }
@@ -454,12 +525,12 @@ class ProjectBoardApp {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const importedTasks = JSON.parse(event.target.result);
         if (Array.isArray(importedTasks)) {
           this.tasks = importedTasks;
-          this.saveTasks();
+          this.saveLocalStorage();
           this.render();
           alert('성공적으로 Task 목록을 불러왔습니다.');
         } else {
