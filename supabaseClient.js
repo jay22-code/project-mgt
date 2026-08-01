@@ -8,20 +8,23 @@ class SupabaseService {
   }
 
   init() {
-    // 1. Try window global config or localStorage
     const url = window.SUPABASE_URL || localStorage.getItem('supabase_url') || '';
     const key = window.SUPABASE_ANON_KEY || localStorage.getItem('supabase_anon_key') || '';
 
-    if (url && key && window.supabase) {
+    const supabaseLib = window.supabase || (window.supabaseJS ? window.supabaseJS : null);
+
+    if (url && key && supabaseLib && typeof supabaseLib.createClient === 'function') {
       try {
-        this.client = window.supabase.createClient(url, key);
+        this.client = supabaseLib.createClient(url, key);
         this.isConfigured = true;
         console.log("⚡ Supabase Client initialized successfully.");
       } catch (err) {
         console.warn("Supabase init error:", err);
+        this.isConfigured = false;
       }
     } else {
-      console.log("ℹ️ Supabase credentials not found. Running in LocalStorage fallback mode.");
+      this.isConfigured = false;
+      console.log("ℹ️ Supabase running in LocalStorage fallback mode.");
     }
   }
 
