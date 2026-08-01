@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>프로젝트 관리 보드 | Task & Progress Tracker</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    <!-- Header & Dashboard -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo">
+          <i class="fa-solid fa-layer-group logo-icon"></i>
+          <h1>Project Pulse <span class="badge-v">v1.1</span></h1>
+        </div>
+        <p class="subtitle">실시간 구현 Task & 진행상황 프로젝트 보드 (Supabase & Vercel Sync)</p>
+      </div>
+
+      <!-- Overview Metrics -->
+      <div class="dashboard-metrics">
+        <div class="metric-card">
+          <div class="metric-icon total"><i class="fa-solid fa-list-check"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">전체 Task</span>
+            <span class="metric-value" id="metric-total">0</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon active"><i class="fa-solid fa-spinner fa-spin-pulse"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">진행 중</span>
+            <span class="metric-value" id="metric-in-progress">0</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon done"><i class="fa-solid fa-circle-check"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">완료됨</span>
+            <span class="metric-value" id="metric-done">0</span>
+          </div>
+        </div>
+        <div class="metric-card progress-metric">
+          <div class="metric-info fill-width">
+            <div class="progress-title">
+              <span class="metric-label">전체 달성률</span>
+              <span class="progress-percentage" id="metric-percent">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Toolbar & Filters -->
+    <section class="toolbar">
+      <div class="toolbar-left">
+        <!-- Search -->
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass search-icon"></i>
+          <input type="text" id="search-input" placeholder="Task 제목, 설명 또는 태그 검색...">
+        </div>
+
+        <!-- Priority Filter -->
+        <div class="filter-group">
+          <i class="fa-solid fa-filter filter-icon"></i>
+          <select id="priority-filter">
+            <option value="all">모든 우선순위</option>
+            <option value="high">🔥 높음 (High)</option>
+            <option value="medium">⚡ 보통 (Medium)</option>
+            <option value="low">🌱 낮음 (Low)</option>
+          </select>
+        </div>
+
+        <!-- View Switcher -->
+        <div class="view-switcher">
+          <button class="view-btn active" id="btn-view-kanban" title="칸반 보드 뷰">
+            <i class="fa-solid fa-table-columns"></i> Kanban
+          </button>
+          <button class="view-btn" id="btn-view-list" title="리스트 뷰">
+            <i class="fa-solid fa-list-ul"></i> List
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <button class="btn btn-secondary" id="btn-supabase-config" title="Supabase 연동 설정">
+          <i class="fa-solid fa-database"></i> Supabase 연동
+        </button>
+        <button class="btn btn-secondary" id="btn-export-json" title="데이터 내보내기">
+          <i class="fa-solid fa-download"></i> 내보내기
+        </button>
+        <button class="btn btn-secondary" id="btn-import-json" title="데이터 불러오기">
+          <i class="fa-solid fa-upload"></i> 불러오기
+        </button>
+        <input type="file" id="file-import-input" accept=".json" style="display: none;">
+        
+        <button class="btn btn-primary" id="btn-add-task">
+          <i class="fa-solid fa-plus"></i> 새 Task 추가
+        </button>
+      </div>
+    </section>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- Kanban View -->
+      <div class="kanban-view" id="kanban-view">
+        <!-- Column: Backlog -->
+        <div class="kanban-column" data-status="backlog">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="status-indicator status-backlog"></span>
+              <h3>대기 (Backlog)</h3>
+            </div>
+            <span class="task-count" id="count-backlog">0</span>
+          </div>
+          <div class="task-cards-container" id="container-backlog"></div>
+        </div>
+
+        <!-- Column: To Do -->
+        <div class="kanban-column" data-status="todo">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="status-indicator status-todo"></span>
+              <h3>진행 예정 (To Do)</h3>
+            </div>
+            <span class="task-count" id="count-todo">0</span>
+          </div>
+          <div class="task-cards-container" id="container-todo"></div>
+        </div>
+
+        <!-- Column: In Progress -->
+        <div class="kanban-column" data-status="in-progress">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="status-indicator status-in-progress"></span>
+              <h3>진행 중 (In Progress)</h3>
+            </div>
+            <span class="task-count" id="count-in-progress">0</span>
+          </div>
+          <div class="task-cards-container" id="container-in-progress"></div>
+        </div>
+
+        <!-- Column: In Review -->
+        <div class="kanban-column" data-status="in-review">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="status-indicator status-in-review"></span>
+              <h3>검토 중 (In Review)</h3>
+            </div>
+            <span class="task-count" id="count-in-review">0</span>
+          </div>
+          <div class="task-cards-container" id="container-in-review"></div>
+        </div>
+
+        <!-- Column: Done -->
+        <div class="kanban-column" data-status="done">
+          <div class="column-header">
+            <div class="column-title">
+              <span class="status-indicator status-done"></span>
+              <h3>완료됨 (Done)</h3>
+            </div>
+            <span class="task-count" id="count-done">0</span>
+          </div>
+          <div class="task-cards-container" id="container-done"></div>
+        </div>
+      </div>
+
+      <!-- List View (Hidden by default) -->
+      <div class="list-view hidden" id="list-view">
+        <table class="task-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Task 제목</th>
+              <th>상태</th>
+              <th>우선순위</th>
+              <th>태그</th>
+              <th>생성일</th>
+              <th>작업</th>
+            </tr>
+          </thead>
+          <tbody id="task-list-body">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- Task Modal Dialog -->
+  <div class="modal-overlay hidden" id="task-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modal-title"><i class="fa-solid fa-pen-to-square"></i> Task 작성/편집</h2>
+        <button class="modal-close-btn" id="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="task-form">
+        <input type="hidden" id="task-id">
+        <div class="form-group">
+          <label for="task-title-input">Task 제목 *</label>
+          <input type="text" id="task-title-input" required placeholder="예: [TASK-01] index.html 메인 레이아웃 작성">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group half">
+            <label for="task-status-select">상태 *</label>
+            <select id="task-status-select">
+              <option value="backlog">대기 (Backlog)</option>
+              <option value="todo">진행 예정 (To Do)</option>
+              <option value="in-progress">진행 중 (In Progress)</option>
+              <option value="in-review">검토 중 (In Review)</option>
+              <option value="done">완료됨 (Done)</option>
+            </select>
+          </div>
+          <div class="form-group half">
+            <label for="task-priority-select">우선순위 *</label>
+            <select id="task-priority-select">
+              <option value="high">🔥 높음 (High)</option>
+              <option value="medium" selected>⚡ 보통 (Medium)</option>
+              <option value="low">🌱 낮음 (Low)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="task-tags-input">태그 (쉼표로 구분)</label>
+          <input type="text" id="task-tags-input" placeholder="예: Frontend, HTML, Core">
+        </div>
+
+        <div class="form-group">
+          <label for="task-desc-input">상세 내용 및 구현 설명</label>
+          <textarea id="task-desc-input" rows="4" placeholder="작업 목표 및 요구사항을 기술하세요..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">취소</button>
+          <button type="submit" class="btn btn-primary">저장하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Supabase Config Modal -->
+  <div class="modal-overlay hidden" id="supabase-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-database"></i> Supabase 연동 설정</h2>
+        <button class="modal-close-btn" id="btn-close-sp-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="supabase-form">
+        <div class="form-group">
+          <label for="sp-url-input">Supabase Project URL</label>
+          <input type="url" id="sp-url-input" placeholder="https://your-project.supabase.co">
+        </div>
+        <div class="form-group">
+          <label for="sp-key-input">Supabase Anon Key</label>
+          <input type="password" id="sp-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6...">
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:16px;">
+          * Supabase 프로젝트 대시보드 Settings -> API에서 URL과 anon public key를 입력하세요.
+        </p>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-sp-modal">취소</button>
+          <button type="submit" class="btn btn-primary">저장 및 연동</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="supabaseClient.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
